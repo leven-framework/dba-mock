@@ -38,9 +38,6 @@ final class MockAdapter implements DatabaseAdapterInterface
     }
 
 
-    /**
-     * @throws \Leven\DBA\Common\Exception\Driver\\Leven\DBA\Common\Driver\\Leven\DBA\Common\Exception\Driver\DriverException
-     */
     public function schema(string $table): array
     {
         if (!isset($this->schema[$table]))
@@ -49,8 +46,9 @@ final class MockAdapter implements DatabaseAdapterInterface
         return $this->schema[$table];
     }
 
+
     /**
-     * @throws \Leven\DBA\Common\Driver\\Leven\DBA\Common\Exception\Driver\DriverException
+     * @throws DriverException
      */
     public function createTable(string $table, array $schema = []): MockAdapter
     {
@@ -66,7 +64,7 @@ final class MockAdapter implements DatabaseAdapterInterface
     }
 
     /**
-     * @throws \Leven\DBA\Common\Exception\Driver\\Leven\DBA\Common\Exception\Driver\DriverException
+     * @throws DriverException
      */
     public function modifyTable(string $table, array $instructions = [])
     {
@@ -77,7 +75,7 @@ final class MockAdapter implements DatabaseAdapterInterface
     }
 
     /**
-     * @throws \Leven\DBA\Common\Exception\Driver\DriverException
+     * @throws DriverException
      */
     public function count(string $table): int
     {
@@ -88,10 +86,7 @@ final class MockAdapter implements DatabaseAdapterInterface
     }
 
 
-    /**
-     * @throws \Leven\DBA\Common\Driver\\Leven\DBA\Common\Exception\Driver\DriverException
-     * @throws \Leven\DBA\Common\Exception\\Leven\DBA\Common\\Leven\DBA\Common\Exception\EmptyResultException
-     */
+
     public function get(string $table, array|string $columns = '*', array $conditions = [], array $options = []): DatabaseAdapterResponse
     {
         if (!isset($this->store[$table]))
@@ -124,10 +119,6 @@ final class MockAdapter implements DatabaseAdapterInterface
         return $response;
     }
 
-    /**
-     * @throws \Leven\DBA\Common\Exception\Driver\\Leven\DBA\Common\Exception\Driver\DriverException
-     * @throws \Leven\DBA\Common\Exception\\Leven\DBA\Common\Exception\ArgumentValidationException
-     */
     public function insert(string $table, array $data): DatabaseAdapterResponse
     {
         if (!isset($this->store[$table]))
@@ -152,10 +143,6 @@ final class MockAdapter implements DatabaseAdapterInterface
         );
     }
 
-    /**
-     * @throws \Leven\DBA\Common\Exception\Driver\\Leven\DBA\Common\Driver\\Leven\DBA\Common\Exception\Driver\DriverException
-     * @throws \Leven\DBA\Common\Exception\ArgumentValidationException
-     */
     public function update(string $table, array $data, array $conditions = [], array $options = []): DatabaseAdapterResponse
     {
         if (!isset($this->store[$table]))
@@ -173,9 +160,6 @@ final class MockAdapter implements DatabaseAdapterInterface
         );
     }
 
-    /**
-     * @throws \Leven\DBA\Common\Exception\Driver\\Leven\DBA\Common\Driver\\Leven\DBA\Common\Exception\Driver\DriverException
-     */
     public function delete(string $table, array $conditions = [], array $options = []): DatabaseAdapterResponse
     {
         if (!isset($this->store[$table]))
@@ -193,7 +177,7 @@ final class MockAdapter implements DatabaseAdapterInterface
     }
 
     /**
-     * @throws \Leven\DBA\Common\Exception\Driver\NotImplementedException
+     * @throws NotImplementedException
      */
     public function txnBegin()
     {
@@ -201,7 +185,7 @@ final class MockAdapter implements DatabaseAdapterInterface
     }
 
     /**
-     * @throws \Leven\DBA\Common\Exception\Driver\NotImplementedException
+     * @throws NotImplementedException
      */
     public function txnCommit()
     {
@@ -209,7 +193,7 @@ final class MockAdapter implements DatabaseAdapterInterface
     }
 
     /**
-     * @throws \Leven\DBA\Common\Exception\Driver\NotImplementedException
+     * @throws NotImplementedException
      */
     public function txnRollback()
     {
@@ -219,7 +203,7 @@ final class MockAdapter implements DatabaseAdapterInterface
     // INTERNAL METHODS
 
     /**
-     * @throws \Leven\DBA\Common\Exception\\Leven\DBA\Common\\Leven\DBA\Common\Exception\ArgumentValidationException
+     * @throws ArgumentValidationException
      */
     private function validate(string $table, array $row): array
     {
