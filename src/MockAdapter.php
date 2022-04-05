@@ -5,8 +5,6 @@
 //  - $options['order']
 //  - transactions
 
-use Closure;
-use Leven\DBA\Mock\Exception\{MockTableAlreadyExistsException, MockTableNotFoundException};
 use Leven\DBA\Common\{DatabaseAdapterInterface, DatabaseAdapterResponse};
 use Leven\DBA\Common\Exception\{
     ArgumentValidationException,
@@ -14,6 +12,8 @@ use Leven\DBA\Common\Exception\{
     Driver\DriverException,
     Driver\NotImplementedException
 };
+use Leven\DBA\Mock\Exception\{MockTableAlreadyExistsException, MockTableNotFoundException};
+use Closure;
 
 final class MockAdapter implements DatabaseAdapterInterface
 {
