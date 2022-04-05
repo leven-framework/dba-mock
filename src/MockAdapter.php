@@ -79,18 +79,20 @@ final class MockAdapter implements DatabaseAdapterInterface
      */
     public function count(string $table): int
     {
-        if (!isset($this->store[$table]))
+        if (!isset($this->schema[$table]))
             throw new DriverException(previous: new MockTableNotFoundException);
 
-        return count($this->store[$table]);
+        return count($this->store[$table] ?? []);
     }
 
 
 
     public function get(string $table, array|string $columns = '*', array $conditions = [], array $options = []): DatabaseAdapterResponse
     {
-        if (!isset($this->store[$table]))
+        if (!isset($this->schema[$table]))
             throw new DriverException(previous: new MockTableNotFoundException);
+
+        if (!isset($this->store[$table])) $this->store[$table] = [];
 
         if (is_string($columns) && $columns != '*') $columns = [$columns];
 
@@ -121,8 +123,10 @@ final class MockAdapter implements DatabaseAdapterInterface
 
     public function insert(string $table, array $data): DatabaseAdapterResponse
     {
-        if (!isset($this->store[$table]))
+        if (!isset($this->schema[$table]))
             throw new DriverException(previous: new MockTableNotFoundException);
+
+        if (!isset($this->store[$table])) $this->store[$table] = [];
 
         if (is_array($data[0] ?? false)) {
             foreach ($data as $row) {
@@ -145,8 +149,10 @@ final class MockAdapter implements DatabaseAdapterInterface
 
     public function update(string $table, array $data, array $conditions = [], array $options = []): DatabaseAdapterResponse
     {
-        if (!isset($this->store[$table]))
+        if (!isset($this->schema[$table]))
             throw new DriverException(previous: new MockTableNotFoundException);
+
+        if(!isset($this->store[$table])) $this->store[$table] = [];
 
         $indexes = $this->filterRowsByConditions($table, $conditions, $options);
         foreach ($indexes as $index)
@@ -162,8 +168,10 @@ final class MockAdapter implements DatabaseAdapterInterface
 
     public function delete(string $table, array $conditions = [], array $options = []): DatabaseAdapterResponse
     {
-        if (!isset($this->store[$table]))
+        if (!isset($this->schema[$table]))
             throw new DriverException(previous: new MockTableNotFoundException);
+
+        if(!isset($this->store[$table])) $this->store[$table] = [];
 
         $indexes = $this->filterRowsByConditions($table, $conditions, $options);
         foreach ($indexes as $index)
@@ -210,18 +218,38 @@ final class MockAdapter implements DatabaseAdapterInterface
         $schema = $this->schema[$table];
 
         foreach ($row as $column => $value) {
-            if (!isset($schema[$column])) throw new ArgumentValidationException('column ' . $column . ' does not exist in table ' . $table);
-            $schemaType = $schema[$column];
+            if (!isset($schema[$column]))
+                throw new ArgumentValidationException("column $column does not exist in table $table");
 
-            $schemaType = explode('(', $schemaType);
-            if (isset($schemaType[1])) {
-                if (strlen($value) > trim($schemaType[1], '()'))
-                    throw new ArgumentValidationException('value of column ' . $column . ' exceeds max length');
+            if(!is_null($value) && !is_bool($value) && !is_numeric($value) && !is_string($value))
+                throw new ArgumentValidationException("column $column in $table is neither null/bool/string/number, can't be stored in database");
+
+            $schemaForColumn = strtolower($schema[$column]);
+
+            if((str_contains($schemaForColumn, 'not null')) && $value === null)
+                throw new ArgumentValidationException("column $column in $table may not be null");
+
+            $type = explode('(', $schemaForColumn);
+            if (isset($type[1])) {
+                if (strlen($value) > rtrim($type[1], ')'))
+                    throw new ArgumentValidationException("value in column $column exceeds column's max length");
             }
 
-            if ($schemaType[0] == 'mock' || $schemaType[0] == 'string' || $schemaType[0] == 'json') continue; // not doing a check
-            if ($schemaType[0] == 'number' && !is_int($value)) throw new ArgumentValidationException('value of column ' . $column . ' is not numeric');
-            if ($schemaType[0] == 'float' && !is_float($value) && !is_int($value)) throw new ArgumentValidationException('value of column ' . $column . ' is not float');
+            if ($type[0] === 'any') continue; // allow any value
+
+            else if (in_array($type[0], ['varchar', 'text']) && !is_string($value))
+                throw new ArgumentValidationException("value of column $column is not string");
+
+            else if($type[0] === 'json'){
+                $result = json_decode($value); if (json_last_error() !== 0)
+                    throw new ArgumentValidationException("value of column $column is not valid json");
+            }
+
+            else if ($type[0] === 'int' && !is_int($value))
+                throw new ArgumentValidationException("value of column $column is not int");
+
+            else if ($type[0] === 'float' && !is_float($value) && !is_int($value))
+                throw new ArgumentValidationException("value of column $column is not float");
         }
 
         return $row;
