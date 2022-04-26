@@ -1,278 +1,120 @@
-<?php namespace Leven\DBA\Mock;
+<?php
 
-// NOT WORKING:
-//  - $options['offset']
-//  - $options['order']
-//  - transactions
+namespace Leven\DBA\Mock;
 
-use Leven\DBA\Common\{DatabaseAdapterInterface, DatabaseAdapterResponse};
-use Leven\DBA\Common\Exception\{
-    ArgumentValidationException,
-    EmptyResultException,
-    Driver\DriverException,
-    Driver\NotImplementedException
-};
-use Leven\DBA\Mock\Exception\{MockTableAlreadyExistsException, MockTableNotFoundException};
 use Closure;
+use Leven\DBA\Common\AdapterInterface;
+use Leven\DBA\Common\AdapterResponse;
+use Leven\DBA\Common\Exception\TxnNotActiveException;
+use Leven\DBA\Mock\Query\{DeleteQueryBuilder, InsertQueryBuilder, SelectQueryBuilder, UpdateQueryBuilder};
+use Leven\DBA\Mock\Structure\Database;
 
-final class MockAdapter implements DatabaseAdapterInterface
+class MockAdapter implements AdapterInterface
 {
 
+    protected Database $database;
+
+    protected int $txnDepth = 0;
+    protected string $txnRollbackDb;
+
     public function __construct(
-        private array $schema,
-        private array $store,
-        private ?Closure $saveData = null
+        Database|Closure|array      $database = [],
+        protected readonly ?Closure $onUpdate = null,
+
+        public readonly string      $tablePrefix = '',
     )
     {
+        if(is_callable($database)) $database = $database();
+
+        $this->database = $database instanceof Database ? $database
+            : Database::fromArray($database);
+    }
+
+    public function getDatabase(): Database
+    {
+        return $this->database;
+    }
+
+    public function executeQuery(Query $query): AdapterResponse
+    {
+        if(is_callable($query->update)) ($query->update)($this);
+
+        if(($table = $query->autoIncrementFromTable) !== null)
+            $lastId = $this->getDatabase()->getTable($table)->getAutoIncrement();
+
+        return new AdapterResponse($query->count, $query->rows, $lastId ?? null);
+    }
+
+    public function save()
+    {
+        if(is_callable($this->onUpdate) && $this->txnDepth === 0)
+            ($this->onUpdate)($this->database);
     }
 
 
-    public function escapeValue(string $string): string
+    // QUERY BUILDERS
+
+    public function select(string $table): SelectQueryBuilder
     {
-        return $string;
+        return new SelectQueryBuilder($this, $table);
     }
 
-    public function escapeName(string $string): string
+    // alias for select
+    public function get(string $table): SelectQueryBuilder
     {
-        return $string;
+        return $this->select($table);
+    }
+
+    public function insert(string $table, ?array $data = null): InsertQueryBuilder|AdapterResponse
+    {
+        $builder = new InsertQueryBuilder($this, $table);
+
+        if($data === null) return $builder;
+
+        $builder->set($data);
+        return $builder->execute();
+    }
+
+    public function update(string $table): UpdateQueryBuilder
+    {
+        return new UpdateQueryBuilder($this, $table);
+    }
+
+    public function delete(string $table): DeleteQueryBuilder
+    {
+        return new DeleteQueryBuilder($this, $table);
     }
 
 
-    public function schema(string $table): array
+    // TRANSACTIONS
+
+    public function txnBegin(): static
     {
-        if (!isset($this->schema[$table]))
-            throw new DriverException(previous: new MockTableNotFoundException);
-
-        return $this->schema[$table];
-    }
-
-
-    /**
-     * @throws DriverException
-     */
-    public function createTable(string $table, array $schema = []): MockAdapter
-    {
-        if (isset($this->schema[$table]))
-            throw new DriverException(previous: new MockTableAlreadyExistsException());
-
-        $this->schema[$table] = $schema;
-        $this->store[$table] = [];
-
-        if(is_callable($this->saveData)) ($this->saveData)($this->schema, $this->store);
+        if($this->txnDepth++ === 0)
+            $this->txnRollbackDb = serialize($this->database);
 
         return $this;
     }
 
-    /**
-     * @throws DriverException
-     */
-    public function modifyTable(string $table, array $instructions = [])
+    public function txnCommit(): static
     {
-        if (!isset($this->schema[$table]))
-            throw new DriverException(previous: new MockTableNotFoundException);
+        if($this->txnDepth === 0) throw new TxnNotActiveException;
+        if(--$this->txnDepth > 0) return $this; // still in txn
 
-        // TODO
+        unset($this->txnRollbackDb);
+        $this->save();
+
+        return $this;
     }
 
-    /**
-     * @throws DriverException
-     */
-    public function count(string $table): int
+    public function txnRollback(): static
     {
-        if (!isset($this->schema[$table]))
-            throw new DriverException(previous: new MockTableNotFoundException);
+        if($this->txnDepth === 0) throw new TxnNotActiveException;
 
-        return count($this->store[$table] ?? []);
-    }
+        $this->txnDepth = 0;
+        $this->database = unserialize($this->txnRollbackDb);
+        unset($this->txnRollbackDb);
 
-
-
-    public function get(string $table, array|string $columns = '*', array $conditions = [], array $options = []): DatabaseAdapterResponse
-    {
-        if (!isset($this->schema[$table]))
-            throw new DriverException(previous: new MockTableNotFoundException);
-
-        if (!isset($this->store[$table])) $this->store[$table] = [];
-
-        if (is_string($columns) && $columns != '*') $columns = [$columns];
-
-        $rows = [];
-        $indexes = $this->filterRowsByConditions($table, $conditions, $options);
-        foreach ($indexes as $index) {
-
-            $rows[] = $this->store[$table][$index];
-
-            // delete all columns that weren't asked for
-            if ($columns != '*')
-                foreach ($this->store[$table][$index] as $column => $value)
-                    if (!in_array($column, $columns)) unset($rows[count($rows) - 1][$column]);
-        }
-
-        $response = new DatabaseAdapterResponse(
-            count: count($rows),
-            rows: $rows
-        );
-
-        if (($options['single'] ?? false)) {
-            if (count($rows) === 0) throw new EmptyResultException;
-            $response->row = array_values($rows)[0];
-        }
-
-        return $response;
-    }
-
-    public function insert(string $table, array $data): DatabaseAdapterResponse
-    {
-        if (!isset($this->schema[$table]))
-            throw new DriverException(previous: new MockTableNotFoundException);
-
-        if (!isset($this->store[$table])) $this->store[$table] = [];
-
-        if (is_array($data[0] ?? false)) {
-            foreach ($data as $row) {
-                $this->validate($table, $row);
-            }
-
-            $this->store[$table] = array_merge($this->store[$table], $data);
-            $count = count($data);
-        } else {
-            $this->store[$table][] = $this->validate($table, $data);
-            $count = 1;
-        }
-
-        if(is_callable($this->saveData)) ($this->saveData)($this->schema, $this->store);
-
-        return new DatabaseAdapterResponse(
-            count: $count
-        );
-    }
-
-    public function update(string $table, array $data, array $conditions = [], array $options = []): DatabaseAdapterResponse
-    {
-        if (!isset($this->schema[$table]))
-            throw new DriverException(previous: new MockTableNotFoundException);
-
-        if(!isset($this->store[$table])) $this->store[$table] = [];
-
-        $indexes = $this->filterRowsByConditions($table, $conditions, $options);
-        foreach ($indexes as $index)
-            foreach ($this->validate($table, $data) as $col => $val)
-                $this->store[$table][$index][$col] = $val;
-
-        if(is_callable($this->saveData)) ($this->saveData)($this->schema, $this->store);
-
-        return new DatabaseAdapterResponse(
-            count: count($indexes)
-        );
-    }
-
-    public function delete(string $table, array $conditions = [], array $options = []): DatabaseAdapterResponse
-    {
-        if (!isset($this->schema[$table]))
-            throw new DriverException(previous: new MockTableNotFoundException);
-
-        if(!isset($this->store[$table])) $this->store[$table] = [];
-
-        $indexes = $this->filterRowsByConditions($table, $conditions, $options);
-        foreach ($indexes as $index)
-            unset($this->store[$table][$index]);
-
-        if(is_callable($this->saveData)) ($this->saveData)($this->schema, $this->store);
-
-        return new DatabaseAdapterResponse(
-            count: count($indexes)
-        );
-    }
-
-    /**
-     * @throws NotImplementedException
-     */
-    public function txnBegin()
-    {
-        throw new NotImplementedException;
-    }
-
-    /**
-     * @throws NotImplementedException
-     */
-    public function txnCommit()
-    {
-        throw new NotImplementedException;
-    }
-
-    /**
-     * @throws NotImplementedException
-     */
-    public function txnRollback()
-    {
-        throw new NotImplementedException;
-    }
-
-    // INTERNAL METHODS
-
-    /**
-     * @throws ArgumentValidationException
-     */
-    private function validate(string $table, array $row): array
-    {
-        $schema = $this->schema[$table];
-
-        foreach ($row as $column => $value) {
-            if (!isset($schema[$column]))
-                throw new ArgumentValidationException("column $column does not exist in table $table");
-
-            if(!is_null($value) && !is_bool($value) && !is_numeric($value) && !is_string($value))
-                throw new ArgumentValidationException("column $column in $table is neither null/bool/string/number, can't be stored in database");
-
-            $schemaForColumn = strtolower($schema[$column]);
-
-            if((str_contains($schemaForColumn, 'not null')) && $value === null)
-                throw new ArgumentValidationException("column $column in $table may not be null");
-
-            $type = explode('(', $schemaForColumn);
-            if (isset($type[1])) {
-                if (strlen($value) > rtrim($type[1], ')'))
-                    throw new ArgumentValidationException("value in column $column exceeds column's max length");
-            }
-
-            if ($type[0] === 'any') continue; // allow any value
-
-            else if (in_array($type[0], ['varchar', 'text']) && !is_string($value))
-                throw new ArgumentValidationException("value of column $column is not string");
-
-            else if($type[0] === 'json'){
-                $result = json_decode($value); if (json_last_error() !== 0)
-                    throw new ArgumentValidationException("value of column $column is not valid json");
-            }
-
-            else if ($type[0] === 'int' && !is_int($value))
-                throw new ArgumentValidationException("value of column $column is not int");
-
-            else if ($type[0] === 'float' && !is_float($value) && !is_int($value))
-                throw new ArgumentValidationException("value of column $column is not float");
-        }
-
-        return $row;
-    }
-
-    private function filterRowsByConditions(string $table, array $conditions, array $options = []): array
-    {
-        if ($options['single'] ?? false) $options['limit'] = 1;
-        $count = 0;
-        $indexes = [];
-
-        foreach ($this->store[$table] as $index => $row) {
-            // eliminate all rows that don't fit conditions
-            foreach ($conditions as $cond_col => $cond_val)
-                if (!isset($row[$cond_col]) || $row[$cond_col] != $cond_val) continue 2;
-
-            // conditions passed, add index to return list
-            $indexes[] = $index;
-
-            // if limit is set and we already have enough rows
-            if (($options['limit'] ?? 0) != 0 && ++$count >= $options['limit']) break;
-        }
-
-        return $indexes;
+        return $this;
     }
 }
