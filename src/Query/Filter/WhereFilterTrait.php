@@ -17,24 +17,23 @@ trait WhereFilterTrait
         if(empty($conditions)) return $exp;
 
         foreach ($conditions as $index => $condition) {
-            if($index !== 0) $exp .= $condition->isOr ? ' || ' : ' && ';
+            if(!empty($exp)) $exp .= $condition->isOr ? ' || ' : ' && ';
 
             if($condition instanceof WhereGroup) {
                 $exp .= static::genWhereExpression($condition->getConditions());
                 continue;
+            } else
+            if($condition instanceof WhereCondition) {
+                $value = $condition->value;
+                if(is_string($value)) $value = json_encode($value); // quote and escape string
+                else if(is_bool($value)) $value = $value ? 'true' : 'false'; // convert boolean to string
+                else if(is_null($value)) $value = 'null'; // convert null to string
+
+                $operand = $condition->operand;
+                if($operand === '<=>' || $operand === '=') $operand = '=='; // achieve more mysql-like behavior
+
+                $exp .= "$condition->column $operand $value";
             }
-
-            assert($condition instanceof WhereCondition);
-
-            $value = $condition->value;
-            if(is_string($value)) $value = json_encode($value); // quote and escape string
-            else if(is_bool($value)) $value = $value ? 'true' : 'false'; // convert boolean to string
-            else if(is_null($value)) $value = 'null'; // convert null to string
-
-            $operand = $condition->operand;
-            if($operand === '<=>' || $operand === '===') $operand = '=='; // achieve more mysql-like behavior
-
-            $exp .= "$condition->column $operand $value";
         }
 
         return "($exp)";
