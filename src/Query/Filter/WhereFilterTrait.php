@@ -16,12 +16,11 @@ trait WhereFilterTrait
         $exp = '';
         if(empty($conditions)) return $exp;
 
-        foreach ($conditions as $index => $condition) {
+        foreach ($conditions as $condition) {
             if(!empty($exp)) $exp .= $condition->isOr ? ' || ' : ' && ';
 
             if($condition instanceof WhereGroup) {
                 $exp .= static::genWhereExpression($condition->getConditions());
-                continue;
             } else
             if($condition instanceof WhereCondition) {
                 $value = $condition->value;
@@ -30,13 +29,13 @@ trait WhereFilterTrait
                 else if(is_null($value)) $value = 'null'; // convert null to string
 
                 $operand = $condition->operand;
-                if($operand === '<=>' || $operand === '=') $operand = '=='; // achieve more mysql-like behavior
+                if($operand === '<=>' || $operand === '=') $operand = '=='; // achieve mysql-like behavior
 
                 $exp .= "$condition->column $operand $value";
             }
         }
 
-        return "($exp)";
+        return empty($exp) ? $exp : "($exp)";
     }
 
     protected function filterWhere(Table $table): Table
