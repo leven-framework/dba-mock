@@ -55,7 +55,7 @@ class Column
 
         $type = match($this->type){
             ColumnType::MOCK => is_string($value) || is_bool($value) || is_int($value) || is_float($value),
-            ColumnType::INT => is_int($value),
+            ColumnType::INT => is_int($value) || is_bool($value),
             ColumnType::FLOAT => is_float($value) || is_int($value),
             ColumnType::TEXT => is_string($value) && ($this->maxLength === 0 || strlen($value) <= $this->maxLength),
             ColumnType::JSON => is_string($value) && $this->isValidJson($value),

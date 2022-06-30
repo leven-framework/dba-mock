@@ -15,7 +15,7 @@ trait ColumnFilterTrait
         if(is_string($this->columns) || empty($this->columns)) return $table;
 
         // iterate through all column names
-        foreach($table->getColumnNames() as $index => $column){
+        foreach($table->getColumnNames() as $column){
             if(in_array($column, $this->columns)) continue; // column is in keep list
 
             $table->deleteColumn($column);

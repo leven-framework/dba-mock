@@ -3,7 +3,10 @@
   "type": "library",
   "require": {
     "leven-framework/dba-common": "^1.0",
-    "symfony/expression-language": "^6.0"
+    "leongrdic/smplang": "^1.0"
+  },
+  "require-dev": {
+    "pestphp/pest": "^1.21"
   },
   "autoload": {
     "psr-4": {

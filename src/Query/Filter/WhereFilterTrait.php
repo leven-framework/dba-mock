@@ -2,9 +2,9 @@
 
 namespace Leven\DBA\Mock\Query\Filter;
 
+use Le\SMPLang\SMPLang;
 use Leven\DBA\Common\BuilderPart\{WhereCondition, WhereGroup, WhereTrait};
 use Leven\DBA\Mock\Structure\Table;
-use Symfony\Component\ExpressionLanguage\ExpressionLanguage;
 
 trait WhereFilterTrait
 {
@@ -43,7 +43,7 @@ trait WhereFilterTrait
         $exp = static::genWhereExpression($this->conditions);
         if($exp === '') return $table;
 
-        $el = new ExpressionLanguage;
+        $el = new SMPLang;
         foreach($table->getRows() as $index => $row){
             $result = $el->evaluate($exp, array_combine($table->getColumnNames(), $row));
             if($result === false) $table->deleteRow($index);

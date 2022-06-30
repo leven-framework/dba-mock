@@ -184,7 +184,10 @@ class Table
             unset($this->columns[$columnName]);
 
             // delete each field for this column
-            foreach($this->rows as &$row) unset($row[$columnIndex]);
+            foreach($this->rows as &$row) {
+                $row = array_values($row); // reset indices because now one column is missing
+                unset($row[$columnIndex]);
+            }
         }
     }
 
