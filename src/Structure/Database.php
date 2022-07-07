@@ -2,6 +2,8 @@
 
 namespace Leven\DBA\Mock\Structure;
 
+use Leven\DBA\Common\Exception\DriverException;
+
 class Database
 {
 
@@ -11,7 +13,8 @@ class Database
 
     public function getTable(string $tableName): Table
     {
-        return $this->tables[$tableName];
+        return $this->tables[$tableName]
+            ?? throw new DriverException("table `$tableName` does not exist");
     }
 
     public function addTable(Table $table): void
