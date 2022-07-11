@@ -40,7 +40,8 @@ trait WhereFilterTrait
 
                 $operand = $condition->operand;
                 if(in_array($operand, ['<=>', '='])) $operand = '=='; // achieve mysql-like behavior
-                $exp .= "$condition->column $operand {static::prepareValue($condition->value)}";
+                $value = static::prepareValue($condition->value);
+                $exp .= "$condition->column $operand $value";
             }
         }
 
