@@ -154,8 +154,12 @@ class Table
      */
     public function addRow(array $row, bool $noAutoIncrement = false): ?int
     {
+        if($this->hasAutoIncrementColumn && !$noAutoIncrement)
+            foreach($this->getColumns() as $column) if($column->autoIncrement)
+                unset($row[$this->getColumnIndex($column->name)]);
+
         $row += $this->getDefaultRow($noAutoIncrement);
-        ksort($row); // array + merging messes up the order key order for some reason
+        ksort($row); // array + merging messes up key order for some reason
 
         $this->validateRow($row);
         $this->rows[] = $row;
